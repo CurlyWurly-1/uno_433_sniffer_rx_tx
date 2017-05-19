@@ -19,201 +19,155 @@ INFORMATION
       The     first  pulse is made up of code[3] and code[4]
       and the second pulse is made up of code[5] and code[6]
 */
-#define rxPin  2           //Input from receiver
-#define maxState    300    //Maximum States (Halve for pulses, will detect "pulse trains" up to 75 pulses long)
 
+#include <TimeLib.h>
+
+#define rxPin            2    // Input from receiver
+#define maxState       300    // Maximum States (Halve for pulses, will detect "pulse trains" up to 150 pulses long)
+#define minStartLow  10000    // Min start pause (to indicate that pulses are finished  
+#define minBreakLow  10000    // Min break pause   
+
+bool          trig;               // recording started
 bool          pinstate;           // State of input pin - Hi(1) or Low(0)
 int           stateCount;         // State change counter
+int           pulses;             // Number of pulses (half of stateCount) 
 int           i;                  // Array counter
-int           low1;               // Index of Low period 1  
-int           low2;               // Index of Low period 2 
-int           low3;               // Index of Low period 3 
-int           low4;               // Index of Low period 4 
+
 unsigned long T_array[maxState];  // Array of HiLo pulse lengths (starts with Hi)
-unsigned long same_cntr;          // "Still Same State" Counter (arbitrary 
+bool          B_array[(maxState/2)];  // Array of HiLo pulse lengths (starts with Hi)
+unsigned long firstLow;           // First Low length (can replace lastLow)
 unsigned long minlengthHI;        // Minimum Hi pulse length in us
-unsigned long maxlengthHI;        // Maximum Hi pulse length in us
 unsigned long minlengthLOW;       // Minimum Lo pulse length in us
-unsigned long maxlengthLOW;       // Maximum Lo pulse length in us
 unsigned long pulseLen;           // pulse length in us
 unsigned long startTime;          // Start Time of pulse in us
 unsigned long endTime;            // End   Time of pulse in us
-unsigned long unitlen;            // lowest pulse length in us (assumed L.C.Denominator)
+unsigned long unitlen;            // lowest AVG pulse length in us (assumed L.C.Denominator)
 
 //*********************************************************************************************
 void setup() {
 //*********************************************************************************************
   pinMode(rxPin, INPUT);      // initialize input pin used for input signal
-  Serial.begin(57600);        // Set up Serial baud rate 
-  pinstate      = 0;          // prepare stored version of pin state to start as "low"
+  Serial.begin(115200);       // Set up Serial baud rate 
+  Serial.println("Scanning for 433Mhz signals");
   startTime     = micros();   // Store first "Start time"
-  same_cntr     = 0;          // initialise 
-  stateCount    = 0;          // initialise 
-  minlengthHI   = 9999;       // initialise 
-  maxlengthHI   = 0;          // initialise 
-  minlengthLOW  = 9999;       // initialise 
-  maxlengthLOW  = 0;          // initialise 
+  pinstate      = false;      // prepare stored version of pin state to start as "low"
+  trig          = false;      // initialise 
 }
 
 //*********************************************************************************************
 void loop() {
 //*********************************************************************************************
-// If no state change, then increment same_cntr
-  if (pinstate == digitalRead(rxPin)) {
-    same_cntr++;
-  }
+// If a state change, then calculate pulselen
+  if (pinstate != digitalRead(rxPin)) {
+    pinstate   = !pinstate;
+    endTime    = micros();                // Record the end time of the read period.
+    pulseLen   = endTime - startTime;     // Calculate Pulse length in us
+    startTime  = endTime;                 // Remember start time for next state change
 
-  else
-  {
-    endTime = micros();  //Record the end time of the read period.
-    pinstate = !pinstate;
-
-// If there has been a input state change, then use "same_cntr" 
-// to arbitrarily check if pulse length is acceptable
-    if (same_cntr < 10  || same_cntr > 10000 ) {
-// if you are here, then pulse length is either too short or too long, so reset variables
-      startTime     = endTime;
-      same_cntr     = 0;
-      stateCount    = 0;
-      minlengthHI   = 9999;
-      maxlengthHI   = 0;
-      minlengthLOW  = 9999;
-      maxlengthLOW  = 0;
-    }
-    else
-    {
-// if you are here, then there has been a state change and pulse length is OK
-      pulseLen   = endTime - startTime;          // Calculate Pulse length in us
-      startTime  = endTime;                      // Remember start time for next state change
-      same_cntr  = 0;                            // Initialise "Same State" counter 
-      T_array[stateCount] = pulseLen;            // Store Pulse Length
-      
- // Remember the max/min time extremes for each state    
-      if (pinstate == false) {
-        if (pulseLen > maxlengthHI) { maxlengthHI = pulseLen; };
-        if (pulseLen < minlengthHI) { minlengthHI = pulseLen; }
-      } else {
-        if (pulseLen > maxlengthLOW) { maxlengthLOW = pulseLen; };
-        if (pulseLen < minlengthLOW) { minlengthLOW = pulseLen; };
-      }
-// Keep storing data up to "maxState" times
-      if (stateCount < maxState) {
-        stateCount++;
-      } else {
-
-//********************************************************************************
-// If you are here, then we have reached the "MaxState" number of time lengths,        
-// so now we interpret the array data to determine where the repeating 
-// patterns are, so that we can output the "code" to serial before trying again      
-//********************************************************************************
-        stateCount = 0;
-
-// First, we detect the first 4 longest LOW states
-        low1 = 0;
-        low2 = 0;
-        low3 = 0;
-        low4 = 0;
-        for(i=0; i<maxState; i=i+1){
-          if ( T_array[i] > ( maxlengthLOW * .80 ) )
-          {
-            if ( low1 == 0 ) {
-              low1 = i;
-            } else {
-               if ( low2 == 0 ) {
-                 low2 = i;
-              } else {
-                 if ( low3 == 0 ) {
-                   low3 = i;
-                } else {
-                  if ( low4 == 0 ) {
-                     low4 = i;
-                  }
-                };
-              };
-            };
-          };
-        };
-        
-// Now we check if the 3 latest pulse trains between the LOW states
-// have the same number of state changes. 
-// If they agree, then output the data
-// N.B. the first pulse train could be unreliable so it is ignored.
-        if (    ( ( low2 - low1 ) == ( low4 - low3 ) )
-             && ( ( low3 - low2 ) == ( low4 - low3 ) )
-        && ( low1 > 0 )
-        && ( low2 > 0 )
-        && ( low3 > 0 )
-        && ( low4 > 0 ) ) {
-
-// Re-examine pulse widths for our selected pulse train
-// N.B. We start from 3rd pulse train because it is hoped it is the most reliable  
-          minlengthHI   = 9999;
-          maxlengthHI   = 0;
-          minlengthLOW  = 9999;
-          maxlengthLOW  = 0;
-          for(i=low3+1; i<low4+1; i=i+1){
-            if ( ( ( i - low3 ) % 2) == 0 ) {
-              if (T_array[i] > maxlengthLOW) { maxlengthLOW = T_array[i]; };
-              if (T_array[i] < minlengthLOW) { minlengthLOW = T_array[i]; };
-            } else {
-              if (T_array[i] > maxlengthHI)  { maxlengthHI  = T_array[i]; };
-              if (T_array[i] < minlengthHI)  { minlengthHI  = T_array[i]; }
-            };
-//            if ( ( ( j - low3 ) >= 0 ) && (  j  <= ( low4 - 2 ) ) )  {
-//              Serial.print(T_array[j]);
-//              Serial.print(", ");
-//            };
-           };
-
-// Calculate unit length of pulses
-          unitlen = 0;
-          if ( minlengthLOW < ( minlengthHI  / 2 )) {
-            unitlen = minlengthLOW ;
-          } else {
-            unitlen = ( ( minlengthHI + minlengthLOW ) / 2 );
-          };
-          
-// Output deciphered data for TX sketch
-          Serial.print("int codez[] = {35,");
-          Serial.print( ( low4 - low3 ) / 2 );
-          Serial.print(",");
-          Serial.print(unitlen);
-          for(i=low3+1; i<low4+1; i=i+1){
-            Serial.print(",");
-//            Serial.print( (T_array[i] / unitlen) );
-            Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
-          };
-          Serial.println("};");
-        };
- 
-// Output deciphered data as HnLn
-//          Serial.print("Pulses = ");
-//          Serial.print( ( low4 - low3 ) / 2 );
-//          Serial.print(",   Unit length = ");
-//          Serial.print(unitlen);
-//          Serial.print(",   Code = ");
-//          for(i=low3+1; i<low4+1; i=i+1){
-//            if ( ( ( i - low3 )  % 2) == 0 ) {
-//              Serial.print("L");
-//              Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
-//              Serial.print(", ");
-//            } else {
-//              Serial.print("H");
-//              Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
-//            };
-//          };
-//          Serial.println(" ");
-//        };
-
-// Reset "extreme" variables 
-        minlengthHI   = 99999;
-        maxlengthHI   = 0;
-        minlengthLOW  = 99999;
-        maxlengthLOW  = 0;
+// If  previous pulse Length is less than 200 Us or greater than 1 second, reset 
+    if ( ( pulseLen < 200 ) || ( pulseLen > 1000000 ) ) {
+      trig          = false; 
+    } else {
+      if ( ( trig == false ) &&  ( pulseLen > minStartLow)  &&  ( pinstate == true ) ) {
+        trig          = true;       // initialise 
+        stateCount    = 0;          // initialise 
+        firstLow      = pulseLen;
+        return;  
       };
-//******************************************* 
-// The above is part of the decipering code * 
-//******************************************* 
     };
+
+// Return if not triggered 
+    if ( trig == false ) { 
+      return;      
+    };
+
+// Store previous state time length (N.B. even indexes are for high, odd index is for low)
+    T_array[stateCount] = pulseLen;            // Store Pulse Length 
+
+// If previous state time length is less than minStartLow, then store pulse length
+// and return to keep recording state 
+    if ( ( pulseLen < minBreakLow ) && ( stateCount < maxState ) ) {
+      stateCount++;    
+      return;
+    }
+
+//********************************************************************************
+// If you are here, then we have reached a pause (    should be a Low state), so 
+// interpret the array data to decipher the "code" to serial before trying again      
+//********************************************************************************
+
+// If necessary, massage time length of "lastlow" to the "firstlow"  
+// It is assumed that the "HIGH" state will never be long
+    if ( pulseLen > firstLow ) { 
+       T_array[stateCount] = firstLow;
+    }
+
+// Calculate Min lengths
+    minlengthHI   = 9999;
+    minlengthLOW  = 9999;
+    for(i=0; i<=stateCount; i=i+1){
+      if ( ( i % 2) == 0 ) {
+        if (T_array[i] < minlengthHI)  { minlengthHI  = T_array[i]; }
+      } else {
+        if (T_array[i] < minlengthLOW) { minlengthLOW = T_array[i]; };
+      };
+    };
+
+// Calculate Avg unit length of pulses
+    unitlen = 0;
+    if ( minlengthLOW < ( minlengthHI  / 2 )) {
+      unitlen = minlengthLOW ;
+    } else {
+      unitlen = ( ( minlengthHI + minlengthLOW ) / 2 );
+    };    
+
+// Calculate pulses
+    pulses = ( (stateCount + 1) / 2);
+
+//********************************************************************************************
+// Example Interpretion of message to Binary string which is then stored in B_array[]
+// This example uses the length of the "High" state (Even indexes)
+//    if long,  then this is a "0"
+//    if short, then this is a "1"
+// N.B.  B_array[] will always have half as many indexes as T_array[] !!
+//  for(i=0; i<=stateCount; i=i+2){
+//    if ( ( (T_array[i] * 10) + (5 * minlengthHI)  ) / (10 * minlengthHI) == 1 ) {
+//      B_array[(i/2)] = 1;
+//    } else {
+//      B_array[(i/2)] = 0;
+//    };
+//  };
+//  Serial.println(" ");
+
+//********************************************************************************************
+// Example check for a particular message ( unitlen = 660, pulses = 79, First 7 pulses are short Hi ) 
+//  if (    (unitlen <  600)
+//       || (unitlen >  700) 
+//       || (pulses  != 79) 
+//       || (B_array[0] != 1) || (B_array[1] != 1) || (B_array[2] != 1) || (B_array[3] != 1)  
+//       || (B_array[4] != 1) || (B_array[5] != 1) || (B_array[6] != 1)) {
+//    return;
+//  };
+
+//********************************************************************************************
+// Example output of binary string
+//  for(i=0; i<=pulses; i=i+1){
+//    Serial.print(B_array[i]);
+//  };
+//  Serial.println(" ");    
+
+// Output deciphered data for TX sketch
+    Serial.print("int codez[] = {35,");
+    Serial.print( pulses );
+    Serial.print(",");
+    Serial.print(unitlen);
+    for(i=0; i<=stateCount; i=i+1){
+      Serial.print(",");
+//    Serial.print( (T_array[i] / unitlen) );          // Alternative round down
+      Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
+    };
+    Serial.println("};");
+  
+    trig          = false;       // initialise 
   };
 }
