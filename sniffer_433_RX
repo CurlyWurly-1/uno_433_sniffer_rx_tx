@@ -4,6 +4,12 @@ Author : Peter Matthews (CurlyWurly)   May 2017
 Desc   : When a static 433 transmission is received, a "int codez[]=.." line is output to the serial bus.
          Copy this line and paste it into the the sister sketch "sniffer_433_TX"   
 INFORMATION
+  N.B. BE AWARE THAT IF ONLY A SINGLE MESSAGE IS SENT, THIS VERSION WILL NOT SEE IT !!!
+       THIS VERSION WAITS FOR A LONG ENOUGH LOW PULSE BEFORE TRIGGERING ON THE NEXT "HIGH" 
+       i.e. THIS SKETCH RELIES ON A MESSAGE BEING REPEATED WITH THE 2ND (repeated) MESSAGE BEING DECIPHERED!!!!!!
+       THE IDEA IS THAT YOU TRIGGER THE TRANSMITTER CLOSE TO THE INPUT AERIAL AND ITS STRONG SIGNAL ENSURES THAT A
+       NICE CLEAN SIGNAL IS ANALYSED BECAUSE THE "AGC" OF THE RECEIVER WILL HAVE THROTTLED DOWN BY THE TIME THE 
+       2nd MESSAGE IS SEEN (this ensures that any interupting far away signals are nicely filtered out) 
   N.B. Connect pin 2 (rxpin) to the RX module output
   N.B. Copy the output "int codez[] = ...." from serial bus and copy into the sister sketch "Sniffer_433_TX"
   N.B. This sniffer sketch just outputs a set value of 35 in code[0]. This means that you may have to 
@@ -156,6 +162,7 @@ void loop() {
 //  };
 //  Serial.println(" ");    
 
+//********************************************************************************************
 // Output deciphered data for TX sketch
     Serial.print("int codez[] = {35,");
     Serial.print( pulses );
