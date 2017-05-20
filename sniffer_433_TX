@@ -4,7 +4,12 @@ Author : Peter Matthews (CurlyWurly)   May 2017
 Desc   : Copy the "int codez[]=.." line manufactured by the sister sketch "sniffer_433_RX" 
          and paste it into this sketch so that this sketch can spoof the original transmitter.
 INFORMATION
-  N.B. Connect pin 3 (txpin) to the TX module input
+************************************************************************************************ 
+*** IF THE SKETCH DOESN'T SEEM TO WORK, INCREASE THE REPEAT VALUE TO 50 AND TRY AGAIN, 
+*** e.g.  "int codez[] = {50........"
+*** N.B. THE CORRECT REPEAT VALUE HAS TO BE VERIFIED BY YOURSELF BY TRIAL AND ERROR 
+************************************************************************************************ 
+N.B. Connect pin 3 (txpin) to the TX module input
   N.B. Copy the output "int codez[] = ...." from the "Sniffer_433_RX" sketch and paste where marked below
   N.B. The sniffer sketch just outputs a set value of 35 in code[0]. This means that you may have to 
        experiment using a different "repeat" value (usually a value of 15 - 45 is OK) 
