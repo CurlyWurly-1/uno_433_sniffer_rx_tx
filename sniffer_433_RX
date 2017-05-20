@@ -30,8 +30,8 @@ INFORMATION
 
 #define rxPin            2    // Input from receiver
 #define maxState       300    // Maximum States (Halve for pulses, will detect "pulse trains" up to 150 pulses long)
-#define minStartLow  10000    // Min start pause (to indicate that pulses are finished  
-#define minBreakLow  10000    // Min break pause   
+#define minStartLow   3000    // Min start pause (to indicate that pulses are finished  
+#define minBreakLow   3000    // Min break pause   
 
 bool          trig;               // recording started
 bool          pinstate;           // State of input pin - Hi(1) or Low(0)
