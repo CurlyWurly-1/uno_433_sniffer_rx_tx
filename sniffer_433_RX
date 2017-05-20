@@ -52,7 +52,7 @@ void setup() {
 //*********************************************************************************************
   pinMode(rxPin, INPUT);      // initialize input pin used for input signal
   Serial.begin(115200);       // Set up Serial baud rate 
-  Serial.println("Scanning for 433Mhz signals");
+  Serial.println("Scanning for 433Mhz signals (selects 2nd repeated message)");
   startTime     = micros();   // Store first "Start time"
   pinstate      = false;      // prepare stored version of pin state to start as "low"
   trig          = false;      // initialise 
