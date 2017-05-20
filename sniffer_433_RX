@@ -26,8 +26,6 @@ INFORMATION
       and the second pulse is made up of code[5] and code[6]
 */
 
-#include <TimeLib.h>
-
 #define rxPin            2    // Input from receiver
 #define maxState       300    // Maximum States (Halve for pulses, will detect "pulse trains" up to 150 pulses long)
 #define minStartLow   3000    // Min start pause (to indicate that pulses are finished  
@@ -40,7 +38,7 @@ int           pulses;             // Number of pulses (half of stateCount)
 int           i;                  // Array counter
 
 unsigned long T_array[maxState];  // Array of HiLo pulse lengths (starts with Hi)
-bool          B_array[(maxState/2)];  // Array of HiLo pulse lengths (starts with Hi)
+bool          B_array[(maxState/2)];  // Array of bits translated from the HiLo pulse lengths 
 unsigned long firstLow;           // First Low length (can replace lastLow)
 unsigned long minlengthHI;        // Minimum Hi pulse length in us
 unsigned long minlengthLOW;       // Minimum Lo pulse length in us
