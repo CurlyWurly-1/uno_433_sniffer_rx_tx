@@ -6,6 +6,6 @@ Copy this line into the "TX" sketch, and you can adapt the the "TX" sketch to sp
 
 For the "RX" sketch, connect pin 2 to the receiver module output. 
 
-N.B. The MSG1 version has now been improved to ignore glitches,  and also to enable output during the last "low" state - it seems to work quite well, so I would use this one from now on, but be aware that the last low phase value will be different for the low phase value between each pulse. 
+N.B. The MSG1 version has now been improved to ignore glitches,  and also to enable output during the last "low" state - it seems to work quite well, so I would use this one from now on, but be aware to use the low phase value seen between pulse trains, because it will be longer for the bery last pulse train). In other words, just ignore the last line output 
 
 For the "TX" sketch, connect pin 3 to the transmitter module input.
