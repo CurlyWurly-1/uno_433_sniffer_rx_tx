@@ -23,13 +23,13 @@ INFORMATION
       and the second pulse is made up of code[5] and code[6]
 */
 
-#define rxPin            2    // Input from receiver
-#define maxState       300    // Maximum States (Halve for pulses, will detect "pulse trains" up to 150 pulses long)
-#define minStartHi     280    // Min start Hi Length (to indicate that pulses have started  
-#define minBreakLow   3000    // Min break Low Length   
-#define maxBreakLow 100000    // Max break Low Length   
-#define pinReadDelay     3    // Delay between pin reads
-#define pinCountLimit    5    // the "count" limit at which a "HI" state is determined 
+#define rxPin                 2    // Input from receiver
+#define maxState            300    // Maximum States (Halve for pulses, will detect "pulse trains" up to 150 pulses long)
+#define minStartHi          280    // Min start Hi Length (to indicate that pulses have started  
+#define minBreakLowMult      10    // Min break Low Length multiplier of unitlen   
+#define maxBreakLowMult     100    // Max break Low Length multiplier of unitlen   
+#define pinReadDelay          2    // Delay between pin reads
+#define pinCountLimit         5    // the "count" limit at which a "HI" state is determined 
 
 bool          newPinState;        // State of input pin - Hi(1) or Low(0)
 bool          pinState;           // State of input pin - Hi(1) or Low(0)
@@ -44,7 +44,10 @@ unsigned long T_array[maxState];  // Array of HiLo pulse lengths (starts with Hi
 bool          B_array[(maxState/2)];  // Array of bits translated from the HiLo pulse lengths 
 unsigned long minlengthHI;        // Minimum Hi pulse length in us
 unsigned long minlengthLOW;       // Minimum Lo pulse length in us
+unsigned long minBreakLow;        // pulse length in us
+unsigned long maxBreakLow;        // pulse length in us
 unsigned long pulseLen;           // pulse length in us
+unsigned long pulseLenOld;        // pulse length in us
 unsigned long previousStartTime;  // Start Time of pulse in us
 unsigned long startTime;          // Start Time of pulse in us
 unsigned long endTime;            // End   Time of pulse in us
@@ -55,14 +58,16 @@ unsigned long unitlen;            // lowest AVG pulse length in us (assumed L.C.
 //*********************************************************************************************
 void setup() {
 //*********************************************************************************************
-  pinMode(rxPin, INPUT);      // initialize input pin used for input signal
-  Serial.begin(500000);       // Set up Serial baud rate 
+  pinMode(rxPin, INPUT);        // initialize input pin used for input signal
+  Serial.begin(115200);         // Set up Serial baud rate 
   Serial.println("Scanning 433Mhz signals (for first message)");
   startTime       = micros();   // Store first "Start time"
   pinState        = false;      // prepare stored version of pin state to start as "low"
   newPinState     = false;      // prepare stored version of pin state to start as "low"
   lowExceedTrip   = false;
   lastLowOutput   = false;
+  minBreakLow     = minStartHi * minBreakLowMult;
+  maxBreakLow     = minStartHi * maxBreakLowMult;
   pinCount        = 0;          // initialise 
   stateCount      = 0;          // initialise 
 }
@@ -156,8 +161,17 @@ void loop() {
 
 // Store previous state time length (N.B. even indexes are for high, odd index is for low)
     T_array[stateCount] = pulseLen;
-
-
+// Calculate initial low break values from first pulse (assummed to be short high blip)
+    if ( stateCount == 0 ){
+      minBreakLow = pulseLen * minBreakLowMult;
+      maxBreakLow = pulseLen * maxBreakLowMult;       
+    }else{
+      if (pulseLen < pulseLenOld){
+        minBreakLow = pulseLen * minBreakLowMult;
+        maxBreakLow = pulseLen * maxBreakLowMult;    
+      };
+    };
+    pulseLenOld = pulseLen;
 // If  Length is less than min length then abort 
     if ( T_array[stateCount] < minStartHi ) {
       stateCount      = 0;          // initialise 
@@ -181,7 +195,6 @@ void loop() {
       return;   
     };
 
-
 // Calculate Min lengths
     minlengthHI   = 9999;
     minlengthLOW  = 9999;
@@ -202,8 +215,18 @@ void loop() {
       unitlen = ( ( minlengthHI + minlengthLOW ) / 2 );
     };    
 
-// Ignore unit lengths Greater than 2000 
-    if ( unitlen > 2000) { 
+// Calculate initial low break values from first pulse (assummed to be short high blip)
+    minBreakLow = unitlen * minBreakLowMult;
+    maxBreakLow = unitlen * maxBreakLowMult;       
+
+// Ignore unit lengths Greater than 1000 
+    if ( unitlen > 1000) { 
+      stateCount      = 0;          // initialise 
+      return;   
+    };
+
+// Ignore unit lengths Less than 200 
+    if ( unitlen < 200) { 
       stateCount      = 0;          // initialise 
       return;   
     };
