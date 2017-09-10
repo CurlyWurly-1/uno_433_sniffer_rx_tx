@@ -1,10 +1,9 @@
 /*
-sketch : sniffer_433_RX_MSG1       (sister of "sniffer_433_TX")
-Author : Peter Matthews (CurlyWurly)   May 2017
+sketch : sniffer_433_RX       (sister of "sniffer_433_TX")
+Author : Peter Matthews (CurlyWurly)   Sept 2017
 Desc   : When a static 433 transmission is received, a "int codez[]=.." line is output to the serial bus.
          Copy this line and paste it into the the sister sketch "sniffer_433_TX"   
 INFORMATION
-  N.B. BE AWARE THIS VERSION IS NOT AS RELIABLE AS "sniffer_433_RX"
   N.B. BE AWARE THIS VERSION IS TRIGGERED WHEN A "HIGH" STATE EXCEEDS "minStartHi"
        i.e. THIS VERSION IS TUNED TO TRAP THE FIRST MESSAGE BECAUSE SOME TRANSMITTERS DO NOT REPEAT 
             THEIR MESSAGE - N.B. IT IS LESS RELIABLE THAN THE "2nd MSG" VERSION
@@ -26,13 +25,17 @@ INFORMATION
 
 #define rxPin            2    // Input from receiver
 #define maxState       300    // Maximum States (Halve for pulses, will detect "pulse trains" up to 150 pulses long)
-#define minStartHi     300    // Min start pause (to indicate that pulses have started  
-#define minBreakLow   6000    // Min break pause   
+#define minStartHi     280    // Min start Hi Length (to indicate that pulses have started  
+#define minBreakLow   3000    // Min break Low Length   
+#define maxBreakLow 100000    // Max break Low Length   
+#define pinReadDelay     3    // Delay between pin reads
+#define pinCountLimit    5    // the "count" limit at which a "HI" state is determined 
 
-bool          changed;            // pin change has occurred
-bool          trig;               // recording started
-bool          output;             // Output the collected data
-bool          pinstate;           // State of input pin - Hi(1) or Low(0)
+bool          newPinState;        // State of input pin - Hi(1) or Low(0)
+bool          pinState;           // State of input pin - Hi(1) or Low(0)
+bool          lowExceedTrip;      // Flag used to remember that a low exceeded has been tripped
+bool          lastLowOutput;      // Output previous "Last Low" before outputting the latest
+int           pinCount;           // 
 int           stateCount;         // State change counter
 int           pulses;             // Number of pulses (half of stateCount) 
 int           i;                  // Array counter
@@ -41,195 +44,241 @@ unsigned long T_array[maxState];  // Array of HiLo pulse lengths (starts with Hi
 bool          B_array[(maxState/2)];  // Array of bits translated from the HiLo pulse lengths 
 unsigned long minlengthHI;        // Minimum Hi pulse length in us
 unsigned long minlengthLOW;       // Minimum Lo pulse length in us
-unsigned long maxlengthLOW;       // Maximum Lo pulse length in us
 unsigned long pulseLen;           // pulse length in us
+unsigned long previousStartTime;  // Start Time of pulse in us
 unsigned long startTime;          // Start Time of pulse in us
 unsigned long endTime;            // End   Time of pulse in us
+unsigned long lowStartTime;       // Last low period start time
+unsigned long lowEndTime;         // Last low period End time
 unsigned long unitlen;            // lowest AVG pulse length in us (assumed L.C.Denominator)
 
 //*********************************************************************************************
 void setup() {
 //*********************************************************************************************
   pinMode(rxPin, INPUT);      // initialize input pin used for input signal
-  Serial.begin(115200);       // Set up Serial baud rate 
+  Serial.begin(500000);       // Set up Serial baud rate 
   Serial.println("Scanning 433Mhz signals (for first message)");
-  startTime     = micros();   // Store first "Start time"
-  pinstate      = false;      // prepare stored version of pin state to start as "low"
-  trig          = false;      // initialise 
+  startTime       = micros();   // Store first "Start time"
+  pinState        = false;      // prepare stored version of pin state to start as "low"
+  newPinState     = false;      // prepare stored version of pin state to start as "low"
+  lowExceedTrip   = false;
+  lastLowOutput   = false;
+  pinCount        = 0;          // initialise 
+  stateCount      = 0;          // initialise 
 }
 
 //*********************************************************************************************
 void loop() {
+//********************************************************************************************* 
+
+  delayMicroseconds(pinReadDelay); 
+
 //*********************************************************************************************
-// If a state change, then calculate pulselen
-  if (pinstate != digitalRead(rxPin)) {
-    endTime    = micros();                // Record the end time of the read period.
-    pulseLen   = endTime - startTime;     // Calculate Pulse length in us
-    startTime  = endTime;                 // Remember start time for next state change
-    pinstate   = !pinstate;
-    changed    = true;
-    
-// If  previous pulse Length is less than 200 Us or greater than 2 second, reset 
-    if ( ( pulseLen < 200 ) || ( pulseLen > 2000000 ) ) {
-      changed = false;
-      trig    = false;
-      output  = false;  
-    } else {
-      if ( ( trig == false ) &&  ( pulseLen > minStartHi)  &&  ( pinstate == false ) ) {
-        trig       = true;       // initialise 
-        stateCount = 0;          // initialise 
+// Output end low pulse info:
+//   - If recording has NOT been started ("stateCount" == 0) 
+//   - and the current pinstate is still low ("false")
+//   - and the "lastLowOutput" flags is "true"
+//   - and the time taken since the last time the offical "pinState" changed is greater than "maxBreakLow"  
+  if (  ( stateCount == 0 ) && ( pinState == false ) && ( lastLowOutput == true ) && ( ( micros() - previousStartTime ) > maxBreakLow ) )  {
+    lastLowOutput = false;
+    Serial.print( ",");
+    Serial.print( ( ( (maxBreakLow)* 10) + (5 * unitlen)  ) / (10 * unitlen) );
+    Serial.println("};");
+  }; 
+
+
+//*********************************************************************************************
+// Set "lowExceedTrip" trip flag to "true":
+//   - If  recording has been started ("stateCount" > 0) 
+//   - and the current pinstate is still low ("false")
+//   - and the "lowExceedTrip" trip flag is currently "false"
+//   - and the time taken since the last time the offical "pinState" changed is greater than "minBreakLow"  
+  if (    ( stateCount > 0 ) && ( pinState == false ) && ( lowExceedTrip == false ) && ( ( micros() - startTime ) > minBreakLow )  )  {
+    lowExceedTrip = true;
+
+// If the above logic is not triggered, then read the input pin
+  }else{
+    if (digitalRead(rxPin)==true) {
+      if (pinState == true) {
+        pinCount = pinCountLimit;
+      }else{
+        pinCount++;
+        
+      };
+    }else{
+      if ( pinState == false ) {
+        pinCount = 0;
+      }else{
+        pinCount--;
       };
     };
+
+    if ( pinCount < 0 ){
+      newPinState  = false; 
+      pinCount     = 0;    
+    };
+
+    if ( pinCount > pinCountLimit ){
+      newPinState  = true; 
+      pinCount     = pinCountLimit;    
+    };
   };
 
-// Return if not triggered 
-  if ( trig == false ) { 
-    return;      
-  };
-  
-  if ( changed == true)  {
-    changed = false;
-// Store previous state time length (N.B. even indexes are for high, odd index is for low)
-    T_array[stateCount] = pulseLen;            // Store Pulse Length 
+//*********************************************************************************************
+// If a state change in "newPinState" or LowExceedTrip1 has been triggered, then proceed
+  if ( (pinState != newPinState) || (lowExceedTrip == true ) ) {
+    endTime           = micros();                // Record the end time of the read period.
+    if (lastLowOutput == true) {
+      lastLowOutput = false;
+      Serial.print( ",");
+      Serial.print( ( ( (endTime - previousStartTime)* 10) + (5 * unitlen)  ) / (10 * unitlen) );
+      Serial.println("};");
+    };
+     
+    pulseLen          = endTime - startTime;     // Calculate Pulse length in us
+    previousStartTime = startTime;               // Remember start of previous pulse 
+    startTime         = endTime;                 // Set start time for next state change
+    pinState          = newPinState;             // Align pinstate
+    lowExceedTrip     = false;                   // Set off trip flag 
+
+// Only start on a "High" pulse (a "Hi" Length is measured after pin has gone "low")
+    if ( ( stateCount == 0 ) && ( pinState == true ) ){
+      stateCount      = 0;          // initialise 
+      return;
+    };
     
-// If previous state time length is less than minStartLow, then store pulse length
+// Only start on an initial "high" greater than "minStartHi "
+// If  previous pulse Length is less than allowed, reset 
+    if ( ( stateCount == 0 ) && ( pulseLen < minStartHi ) ) {
+      stateCount      = 0;          // initialise 
+      return;  
+    };
+
+// Store previous state time length (N.B. even indexes are for high, odd index is for low)
+    T_array[stateCount] = pulseLen;
+
+
+// If  Length is less than min length then abort 
+    if ( T_array[stateCount] < minStartHi ) {
+      stateCount      = 0;          // initialise 
+      return;  
+    };
+
+
+// If previous state time length is less than minBreakLow, then store pulse length
 // and return to keep recording state 
-    if ( ( pulseLen < minBreakLow ) && ( stateCount < maxState ) ) {
-//    if (stateCount < maxState) {
+    if ( ( T_array[stateCount] < minBreakLow ) && ( stateCount < maxState ) ) {
       stateCount++;    
       return;
-    }else{
-      output = true;
-    };
-  };
-
-  if ( output == false ) {
-    return;      
-  };
-
-//********************************************************************************
-// If you are here, then we have reached a pause (    should be a Low state), so 
-// interpret the array data to decipher the "code" to serial before trying again      
-//********************************************************************************
-
-// Calculate Min lengths
-  minlengthHI   = 9999;
-  minlengthLOW  = 9999;
-  maxlengthLOW  = 0;
-
-  for(i=0; i<stateCount; i=i+1){
-    if ( ( i % 2) == 0 ) {
-      if (T_array[i] < minlengthHI)  { minlengthHI  = T_array[i]; }
-    } else {
-      if (T_array[i] < minlengthLOW) { minlengthLOW = T_array[i]; };
-      if (T_array[i] > maxlengthLOW) { maxlengthLOW = T_array[i]; };
-    };
-  };
-
-// Calculate Avg unit length of pulses
-  unitlen = 0;
-  if ( minlengthLOW < ( minlengthHI  / 2 )) {
-    unitlen = minlengthLOW ;
-  } else {
-    unitlen = ( ( minlengthHI + minlengthLOW ) / 2 );
-  };    
-
-// Ignore unit lengths Greater than 4000 
-  if ( unitlen > 4000) { 
-    trig          = false;       // initialise 
-    return;   
-  };
+    }
 
 // Calculate pulses
-  pulses = ( (stateCount + 1) / 2);
+    pulses = ( (stateCount + 1) / 2);
 
 // Ignore spurious (?) pulse trains
- if ( pulses < 2) { 
-   trig          = false;       // initialise 
-   return;   
- };
-
-//********************************************************************************************
-// Output deciphered data as HnLn
-  Serial.print("Pulses = ");
-  Serial.print( pulses );
-  Serial.print(",   Unit length = ");
-  Serial.print(unitlen);
-  Serial.print(",  minHI / minlo = ");
-  Serial.print(minlengthHI);
-  Serial.print(" / ");
-  Serial.print(minlengthLOW);
-  Serial.print(",   Code = ");
-  for(i=0; i<=stateCount; i=i+1){
-    if ( ( i  % 2) == 0 ) {
-      Serial.print("H");
-      Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
-    } else {
-      Serial.print("L");
-      Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
-      Serial.print(", ");
+    if ( pulses < 10) { 
+      stateCount      = 0;          // initialise 
+      return;   
     };
-  };
-  Serial.println(" ");
+
+
+// Calculate Min lengths
+    minlengthHI   = 9999;
+    minlengthLOW  = 9999;
+// Don;t count last low!!
+    for(i=2; i<stateCount; i=i+1){
+      if ( ( i % 2) == 0 ) {
+        if (T_array[i] < minlengthHI)  { minlengthHI  = T_array[i]; }
+      } else {
+        if (T_array[i] < minlengthLOW) { minlengthLOW = T_array[i]; };
+      };
+    };
+
+// Calculate Avg unit length of pulses
+    unitlen = 0;
+    if ( minlengthLOW < ( minlengthHI  / 2 )) {
+      unitlen = minlengthLOW ;
+    } else {
+      unitlen = ( ( minlengthHI + minlengthLOW ) / 2 );
+    };    
+
+// Ignore unit lengths Greater than 2000 
+    if ( unitlen > 2000) { 
+      stateCount      = 0;          // initialise 
+      return;   
+    };
+
+
+
+//********************************************************************************
+// If you are here, then we have reached a pause ( should be a Low state) of a 
+// valid pulse train so interpret the array data to decipher the "code" and output to serial      
+//********************************************************************************
+    
+
 //********************************************************************************************
 // Example Interpretion of message to Binary string which is then stored in B_array[]
 // This example uses the length of the "High" state (Even indexes)
-//  if long,  then this is a "0"
-//  if short, then this is a "1"
+//    if long,  then this is a "0"
+//    if short, then this is a "1"
 // N.B.  B_array[] will always have half as many indexes as T_array[] !!
-//for(i=0; i<=stateCount; i=i+2){
-//  if ( ( (T_array[i] * 10) + (5 * minlengthHI)  ) / (10 * minlengthHI) == 1 ) {
-//    B_array[(i/2)] = 1;
-//  } else {
-//    B_array[(i/2)] = 0;
+//  for(i=0; i<=stateCount; i=i+2){
+//    if ( ( (T_array[i] * 10) + (5 * minlengthHI)  ) / (10 * minlengthHI) == 1 ) {
+//      B_array[(i/2)] = 1;
+//    } else {
+//      B_array[(i/2)] = 0;
+//    };
 //  };
-//};
-//Serial.println(" ");
+//  Serial.println(" ");
 
 //********************************************************************************************
 // Example check for a particular message ( unitlen = 660, pulses = 79, First 7 pulses are short Hi ) 
-//if (    (unitlen <  600)
-//     || (unitlen >  700) 
-//     || (pulses  != 79) 
-//     || (B_array[0] != 1) || (B_array[1] != 1) || (B_array[2] != 1) || (B_array[3] != 1)  
-//     || (B_array[4] != 1) || (B_array[5] != 1) || (B_array[6] != 1)) {
-//  return;
-//};
+//  if (    (unitlen <  600)
+//       || (unitlen >  700) 
+//       || (pulses  != 79) 
+//       || (B_array[0] != 1) || (B_array[1] != 1) || (B_array[2] != 1) || (B_array[3] != 1)  
+//       || (B_array[4] != 1) || (B_array[5] != 1) || (B_array[6] != 1)) {
+//    return;
+//  };
 
 //********************************************************************************************
 // Example output of binary string
-//for(i=0; i<=pulses; i=i+1){
-//  Serial.print(B_array[i]);
-//};
-//Serial.println(" ");    
+//  for(i=0; i<=pulses; i=i+1){
+//    Serial.print(B_array[i]);
+//  };
+//  Serial.println(" ");    
 
 //********************************************************************************************
+
 // Output deciphered data for TX sketch
-//Serial.print("int codez[] = {35,");
-//Serial.print( pulses );
-//Serial.print(",");
-//Serial.print(unitlen);
-//for(i=0; i<=stateCount; i=i+1){
-//  Serial.print(",");
-///    Serial.print( (T_array[i] / unitlen) );          // Alternative round down
-//  Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
-//};
-//Serial.println("};");
+// ( Do not output the last "low" period)
+    Serial.print("int codez[] = {35,");
+    Serial.print( pulses );
+    Serial.print(",");
+    Serial.print(unitlen);
+    for(i=0; i<stateCount; i=i+1){
+      Serial.print(",");
+//      Serial.print( (T_array[i] / unitlen) );          // Alternative round down
+      Serial.print( ( (T_array[i] * 10) + (5 * unitlen)  ) / (10 * unitlen) );
+    };
+    lastLowOutput    = true;
+    
+//********************************************************************************************
+// Print pulse lengths
+//    for(i=0; i<=stateCount; i=i+1){
+//      if ( ( i % 2) == 0 ) {
+//        Serial.print( (i/2 +1) );
+//        Serial.print( " - ");        
+//        Serial.print(T_array[i] ) ;
+//      } else {
+//        Serial.print( " , ");   
+//        Serial.println ( T_array[i] )  ;
+//      };
+//    };
+//    Serial.println(" ");
 
   
-  pinstate  = digitalRead(rxPin);
-  startTime = micros();
-  while (output == true) {
-    if (pinstate != digitalRead(rxPin)) {
-      startTime  = micros();
-      pinstate = !pinstate;
-    };
-    pulseLen = micros() - startTime; 
-    if ( (pinstate == false) && (pulseLen > ( 2 * maxlengthLOW) ) ) {
-       output = false;  
-    };
-  };  
-  changed = false;
-  trig   = false;
-  output = false;  
-}
+//********************************************************************************************
+    stateCount      = 0;          // initialise 
+  };
+};
