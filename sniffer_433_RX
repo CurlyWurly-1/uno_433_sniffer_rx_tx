@@ -1,6 +1,7 @@
 /*
 sketch : sniffer_433_RX       (sister of "sniffer_433_TX")
-Author : Peter Matthews (CurlyWurly)   May 2017
+Author : Peter Matthews (CurlyWurly)  
+Version: V.0.2  (June 2019)
 Desc   : When a static 433 transmission is received, a "int codez[]=.." line is output to the serial bus.
          Copy this line and paste it into the the sister sketch "sniffer_433_TX"   
 INFORMATION
