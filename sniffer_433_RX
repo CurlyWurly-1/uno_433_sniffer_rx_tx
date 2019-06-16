@@ -29,7 +29,7 @@ INFORMATION
 #define rxPin            2    // Input from receiver
 #define minStates       24    // Min States (used to calculate a low pulse) 
 #define lowMultiplier  1.1    // used to help identify the "End pause" 
-#define maxState       200    // Maximum States (Halve for pulses, will detect "pulse trains" up to 150 pulses long)
+#define maxState       200    // Maximum States (Halve for pulses, will detect "pulse trains" up to 100 pulses long)
 #define minBreakLow   1000    // Min break pause   
 #define maxSmooth        3    // Smoothing factor 
 #define delayAfter    2000    // Delay after Triggering 
@@ -313,7 +313,7 @@ void decipher_h() {
                 + B_array[29]*2 
                 + B_array[30]*1;
     tempFloat = ( tempFloat - 400 ) / 10;
-    Serial.print(tempFloat);
+    Serial.print(tempFloat,1);
     Serial.println(" Degrees C");
     Serial.print("- Outside Humidity    = "); 
     tempFloat =   B_array[31]*128 
@@ -324,8 +324,8 @@ void decipher_h() {
                 + B_array[36]*4 
                 + B_array[37]*2 
                 + B_array[38]*1 ;
-    Serial.print( tempFloat );
-    Serial.println( " % RH" );
+    Serial.print( tempFloat,0 );
+    Serial.println( "% RH" );
     return;
   };
 
@@ -385,7 +385,7 @@ void decipher_l() {
                   + B_array[22]*2 
                   + B_array[23]*1 );
     tempFloat = tempFloat / 10;
-    Serial.print(tempFloat);
+    Serial.print(tempFloat,1);
     Serial.println(" Degrees C");
     return;
   };
