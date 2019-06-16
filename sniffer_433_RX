@@ -72,12 +72,15 @@ void setup() {
   Serial.println(" ");  
   Serial.print("***");    
  
-  startTime     = micros();   // Store first "Start time"
-  pinstate      = false;      // prepare stored version of pin state to start as "low"
-  trig          = false;      // initialise 
+  startTime         = micros();   // Store first "Start time"
+  pinstate          = false;      // prepare stored version of pin state to start as "low"
+  trig              = false;      // initialise 
   stateCount        = 0;           // initialise 
+  shortestLowPulse  = 999999;
   longestLowPulse   = 0;
-  cnt = 0;
+  shortestHiPulse   = 999999;
+  longestHiPulse    = 0;
+  cnt               = 0;
 }
 
 //*********************************************************************************************
@@ -143,12 +146,13 @@ void loop() {
       trig          = false; 
     } else {
       if ( ( trig == false ) &&  ( pulseLen > minBreakLow)  &&  ( pinstate == true ) ) {
+        firstLow          = pulseLen;
         trig              = true;       // initialise 
         stateCount        = 0;          // initialise 
-        firstLow          = pulseLen;
         shortestLowPulse  = 999999;
         longestLowPulse   = 0;
         shortestHiPulse   = 999999;
+        longestHiPulse    = 0;
         return;  
       };
     };
