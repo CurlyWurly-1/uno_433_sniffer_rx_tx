@@ -239,8 +239,8 @@ void data_output() {
 // N.B.  B_array[] will always have half as many indexes as T_array[] !!
 
 //**************************************   
-  if ( (longestHiPulse / shortestHiPulse ) > 1 )
-  {
+//  if ( (longestHiPulse / shortestHiPulse ) > 1 )
+//  {
     for(i=0; i<=stateCount; i=i+2)
     {
       if ( ( T_array[i] / shortestHiPulse ) > 1 ) 
@@ -252,17 +252,17 @@ void data_output() {
     };
 // HI  output of binary string
     Serial.print("Hi  Binary   = ");
-    for(i=0; i<=pulses; i=i+1)
+    for(i=0; i<pulses; i=i+1)
     {
       Serial.print(B_array[i]);
     };
     Serial.println(" ");        
     decipher_h();
-  };
+//  };
 
 //**************************************   
-  if ( (longestLowPulse / shortestLowPulse ) > 1 )   
-    {
+//  if ( (longestLowPulse / shortestLowPulse ) > 1 )   
+//  {
     for(i=1; i<=stateCount; i=i+2)
     {
       if ( ( T_array[i] / shortestLowPulse ) > 1 ) 
@@ -274,27 +274,27 @@ void data_output() {
     };
 // LOW output of binary string
     Serial.print("Low Binary   = ");
-    for(i=0; i<=pulses; i=i+1)
+    for(i=0; i<pulses; i=i+1)
     {
       Serial.print(B_array[i]);
     };
     Serial.println("");        
     decipher_l();
-  };
+//  };
+
 
   Serial.println("");
 
-//********************************************************************************************
   delay(delayAfter);
   Serial.print("***");       
-}
+};
 
 //*********************************************************************************************
 void decipher_h() {
 //*********************************************************************************************
 
-// Example check for a particular message ( unitlen = 660, pulses = 79, First 7 pulses are short Hi ) 
-  if (    ( shortestHiPulse >  350 )
+// Maplin Weather Station 660, pulses = 79  (First 7 pulses are short Hi ) 
+  if (    ( shortestHiPulse >  400 )
        && ( shortestHiPulse <  700 ) 
        && ( pulses  == 79  ) )
   {     
@@ -329,15 +329,49 @@ void decipher_h() {
     return;
   };
 
+// Maplin Mains Switch 
+  if (    ( shortestHiPulse >  400 )
+       && ( shortestHiPulse <  550 ) 
+       && ( pulses  == 25  ) )
+  {
+    Serial.print("- Maplin Mains Switch"); 
+    if ( B_array[9] == true )
+    {
+       Serial.print(" - Switch 1"); 
+    }else
+    {
+      if ( B_array[13] == true )
+      {
+        Serial.print(" - Switch 3"); 
+      }else
+      {
+        if ( B_array[11] == true )
+        {
+          Serial.print(" - Switch 2"); 
+        }else
+        {
+          Serial.print(" - Switch 4"); 
+        };
+      };
+    };
+    if ( B_array[23] == true )
+    {
+      Serial.println(" - Off ");      
+    }else
+    {
+      Serial.println(" - On "); 
+    };
+    return;
+  };
 };
 
 //*********************************************************************************************
 void decipher_l() {
 //*********************************************************************************************
-//
 
-  if (    ( shortestHiPulse >  350 )
-       && ( shortestHiPulse <  700 ) 
+// Lidl Temperature Sensor 
+  if (    ( shortestHiPulse >  500 )
+       && ( shortestHiPulse <  600 ) 
        && ( pulses  == 34  ) )
   {     
     Serial.println("- Lidl Weather system");
@@ -353,6 +387,32 @@ void decipher_l() {
     tempFloat = tempFloat / 10;
     Serial.print(tempFloat);
     Serial.println(" Degrees C");
+    return;
+  };
+
+// 1byOne PIR Driveway Alarm
+  if (    ( shortestHiPulse >  280 )    // 328
+       && ( shortestHiPulse <  400 ) 
+       && ( pulses  == 18  ) )
+  { 
+    Serial.println("- One By One Driveway Alarm"); 
+  };
+
+// Byron BY34 Door Bell
+  if (    ( shortestHiPulse >  450 )    // 328
+       && ( shortestHiPulse <  550 ) 
+       && ( pulses  == 21  ) )
+  { 
+    Serial.println("- Byron By34 Door Bell"); 
+    return;
+  };
+
+// IQ PIR Alarm 
+  if (    ( shortestHiPulse >  700 )    // 328
+       && ( shortestHiPulse <  950 ) 
+       && ( pulses  == 21  ) )
+  { 
+    Serial.println("- IQ PIR Alarm"); 
     return;
   };
 
